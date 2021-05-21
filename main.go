@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/Haizza1/go-block/blockchain"
 )
@@ -15,8 +16,13 @@ func main() {
 	chain.AddBlock("Third block after genesis")
 
 	for _, block := range chain.Blocks {
+
 		fmt.Printf("Previos Hash: %x\n", block.PrevHash)
 		fmt.Printf("Data in block: %s\n", block.Data)
 		fmt.Printf("Block Hash: %x\n", block.Hash)
+
+		pow := blockchain.NewProof(block)
+		fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
+		fmt.Println()
 	}
 }

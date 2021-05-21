@@ -37,7 +37,8 @@ func NewProof(b *Block) *ProofOfWork {
 	return pow
 }
 
-// IinitData will create a new byte slice and return it
+// IinitData will create a new byte slice
+// from the block data and return it
 func (pow *ProofOfWork) InitData(nonce int) []byte {
 	data := bytes.Join(
 		[][]byte{
@@ -75,6 +76,16 @@ func (pow *ProofOfWork) Run() (int, []byte) {
 
 	fmt.Println()
 	return nonce, hash[:]
+}
+
+// Validate will check one more time after run that the hash is valid
+func (pow *ProofOfWork) Validate() bool {
+	var intHash big.Int
+	data := pow.InitData(pow.Block.Nonce)
+	hash := sha256.Sum256(data)
+
+	intHash.SetBytes(hash[:])
+	return intHash.Cmp(pow.Target) == -1
 }
 
 // Tohex will decode the given number into bytes, set it in
