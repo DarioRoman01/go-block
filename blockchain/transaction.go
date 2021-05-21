@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
+	"encoding/hex"
 	"fmt"
+	"log"
+	"runtime"
 )
 
 type Transaction struct {
@@ -52,6 +55,44 @@ func CoinbaseTx(to, data string) *Transaction {
 		Outputs: []TxOutput{txout},
 	}
 
+	tx.setID()
+	return &tx
+}
+
+// NewTransaction will create a new transacion and validate if the user has enough
+// coins to make the transaction
+func NewTransaction(from, to string, amount int, chain *BlockChain) *Transaction {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println(r)
+			runtime.Goexit()
+		}
+	}()
+
+	var inputs []TxInput
+	var outputs []TxOutput
+
+	acc, validOutputs := chain.FindSpendableOutputs(from, amount)
+	if acc < amount {
+		log.Panic("Error: not enough funds")
+	}
+
+	for txid, outs := range validOutputs {
+		txID, err := hex.DecodeString(txid)
+		CheckError(err)
+
+		for _, out := range outs {
+			input := TxInput{ID: txID, Out: out, Sig: from}
+			inputs = append(inputs, input)
+		}
+	}
+
+	outputs = append(outputs, TxOutput{Value: amount, PubKey: to})
+	if acc > amount {
+		outputs = append(outputs, TxOutput{Value: acc - amount, PubKey: from})
+	}
+
+	tx := Transaction{ID: nil, Inputs: inputs, Outputs: outputs}
 	tx.setID()
 	return &tx
 }
