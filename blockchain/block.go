@@ -45,7 +45,7 @@ func (b *Block) Serialize() []byte {
 }
 
 // Deserialize will deserialize a chunk of data into a Block struct
-func (b *Block) Deserialize(data []byte) *Block {
+func Deserialize(data []byte) *Block {
 	var block Block
 
 	decoder := gob.NewDecoder(bytes.NewReader(data))

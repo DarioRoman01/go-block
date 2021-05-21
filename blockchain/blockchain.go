@@ -15,6 +15,11 @@ type BlockChain struct {
 	Database *badger.DB // represents the db where the blocks will be store
 }
 
+type BlockChainIterator struct {
+	CurrentHash []byte // represents the current hash
+	Database    *badger.DB
+}
+
 // InitBLockChain will start the blockchain
 func InitBLockChain() *BlockChain {
 	var lastHash []byte
@@ -73,4 +78,30 @@ func (chain *BlockChain) AddBlock(data string) {
 	})
 
 	CheckError(err)
+}
+
+// Iterator will return a new block chain iterator instance
+// whit the blockchain data
+func (chain *BlockChain) Iterator() *BlockChainIterator {
+	iter := &BlockChainIterator{chain.LastHash, chain.Database}
+	return iter
+}
+
+// Next will return the next block on the list, until the genesis
+func (iter *BlockChainIterator) Next() *Block {
+	var block *Block
+
+	err := iter.Database.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(iter.CurrentHash)
+		CheckError(err)
+
+		endcodedBlock, err := item.ValueCopy(nil)
+		block = Deserialize(endcodedBlock)
+		return err
+	})
+
+	CheckError(err)
+
+	iter.CurrentHash = block.PrevHash
+	return block
 }
