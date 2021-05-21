@@ -16,7 +16,7 @@ type CommandLine struct{}
 func (cli *CommandLine) printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("	getbalance -address <ADDRESS> - get the balance for the given address")
-	fmt.Println(" 	createBLockhain -address <ADDRESS> create a blockchain with the given address")
+	fmt.Println(" 	createBlockchain -address <ADDRESS> create a blockchain with the given address")
 	fmt.Println(" 	printchain - Prints the blocks in the Blockchain")
 	fmt.Println(" 	send -from <FROM> -to <TO> -amount <AMOUNT> - Send Send amount of coins")
 }
@@ -86,7 +86,7 @@ func (cli *CommandLine) run() {
 	cli.validateArgs()
 
 	getBalanceCmd := flag.NewFlagSet("getbalance", flag.ExitOnError)
-	createBLockchainCmd := flag.NewFlagSet("createBLockhain", flag.ExitOnError)
+	createBLockchainCmd := flag.NewFlagSet("createBlockchain", flag.ExitOnError)
 	sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
 	printChainCmd := flag.NewFlagSet("print", flag.ExitOnError)
 
@@ -109,7 +109,7 @@ func (cli *CommandLine) run() {
 		err := sendCmd.Parse(os.Args[2:])
 		blockchain.CheckError(err)
 
-	case "createBLockhain":
+	case "createBlockchain":
 		err := createBLockchainCmd.Parse(os.Args[2:])
 		blockchain.CheckError(err)
 
