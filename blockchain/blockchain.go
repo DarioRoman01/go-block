@@ -1,6 +1,7 @@
 package blockchain
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"runtime"
@@ -144,18 +145,91 @@ func (iter *BlockChainIterator) Next() *Block {
 // Unspent transactions are transactions that have outputs wich are not referenced
 // by other inputs. This is important because if there is an output hassent been spent
 // that means that those tokens still exists for a certain user.
-// func (chain *BlockChain) FindUnspentTransactions(address string) []Transaction {
-// 	var unspentTsx []Transaction
-// 	spentTxos := make(map[string][]int)
-// 	iter := chain.Iterator()
+func (chain *BlockChain) FindUnspentTransactions(address string) []Transaction {
+	var unspentTsx []Transaction
+	spentTxos := make(map[string][]int)
+	iter := chain.Iterator()
 
-// 	for {
-// 		block := iter.Next()
+	for {
+		block := iter.Next()
 
-// 		if len(block.PrevHash) == 0 {
-// 			break // this is the genesis
-// 		}
-// 	}
+		for _, tsx := range block.Transactions {
+			txID := hex.EncodeToString(tsx.ID)
 
-// 	return unspentTsx
-// }
+		Outputs:
+			for outIdx, out := range tsx.Outputs {
+				if spentTxos[txID] != nil {
+					for _, spentOut := range spentTxos[txID] {
+						if spentOut == outIdx {
+							continue Outputs
+						}
+					}
+				}
+
+				if out.CanBeUnlocked(address) {
+					unspentTsx = append(unspentTsx, *tsx)
+				}
+			}
+
+			if !tsx.IsCoinBase() {
+				for _, in := range tsx.Inputs {
+					if in.CanUnlock(address) {
+						inTxID := hex.EncodeToString(in.ID)
+						spentTxos[inTxID] = append(spentTxos[inTxID], in.Out)
+					}
+				}
+			}
+		}
+
+		if len(block.PrevHash) == 0 {
+			break // this is the genesis
+		}
+	}
+
+	return unspentTsx
+}
+
+// Find unspent transaction outputs will return all the unspent
+// outputs of the current user.
+func (chain *BlockChain) FindUTXO(address string) []TxOutput {
+	var Utxo []TxOutput
+	unspentTransactoin := chain.FindUnspentTransactions(address)
+
+	for _, tx := range unspentTransactoin {
+		for _, out := range tx.Outputs {
+			if out.CanBeUnlocked(address) {
+				Utxo = append(Utxo, out)
+			}
+		}
+	}
+
+	return Utxo
+}
+
+// Find Spendable outputs will enable create normal transactions wich are not coinbase transactions
+// this function will ensure that the user have the coins to make the transaction. something like
+// the amount of coins that the user have
+func (chain *BlockChain) FindSpendableOutputs(address string, amount int) (int, map[string][]int) {
+	unspentOuts := make(map[string][]int)
+	unspentTxs := chain.FindUnspentTransactions(address)
+	accumulated := 0
+
+Work:
+	for _, tx := range unspentTxs {
+		txID := hex.EncodeToString(tx.ID)
+
+		for outIdx, out := range tx.Outputs {
+			if out.CanBeUnlocked(address) && accumulated < amount {
+				accumulated += out.Value
+				unspentOuts[txID] = append(unspentOuts[txID], outIdx)
+
+				if accumulated >= amount {
+					break Work
+				}
+			}
+
+		}
+	}
+
+	return accumulated, unspentOuts
+}
