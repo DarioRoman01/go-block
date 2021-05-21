@@ -38,9 +38,9 @@ func genesis() *Block {
 func (b *Block) Serialize() []byte {
 	var res bytes.Buffer
 	encoder := gob.NewEncoder(&res)
+
 	err := encoder.Encode(b)
 	CheckError(err)
-
 	return res.Bytes()
 }
 

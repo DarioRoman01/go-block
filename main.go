@@ -56,6 +56,7 @@ func (cli *CommandLine) printChain() {
 	}
 }
 
+// run will start the comman line app and validate the args
 func (cli *CommandLine) run() {
 	cli.validateArgs()
 
