@@ -57,6 +57,7 @@ func CoinbaseTx(to, data string) *Transaction {
 }
 
 // IsCoinbase will determine if the current transaction is a coinbase
+// based on the data created by default in the coinbase function
 func (tx *Transaction) IsCoinBase() bool {
 	return len(tx.Inputs) == 1 && len(tx.Inputs[0].ID) == 0 && tx.Inputs[0].Out == -1
 }

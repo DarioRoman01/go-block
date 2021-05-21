@@ -2,24 +2,41 @@ package blockchain
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/gob"
+	"fmt"
 	"log"
+	"runtime"
 )
 
 type Block struct {
-	Hash     []byte // represents the hash of the block
-	Data     []byte // represents the data inside of the block
-	PrevHash []byte // represents last block hash
-	Nonce    int
+	Hash         []byte         // represents the hash of the block
+	Transactions []*Transaction // represents the transactions of the block
+	PrevHash     []byte         // represents last block hash
+	Nonce        int            // represents the diffycul
+}
+
+// HashTransactions will allow to use a hashing mechanism
+// to provide a unique reperesentation of all the transactions
+func (b *Block) HashTransactions() []byte {
+	var tsxHashes [][]byte
+	var txHash [32]byte
+
+	for _, tx := range b.Transactions {
+		tsxHashes = append(tsxHashes, tx.ID)
+	}
+
+	txHash = sha256.Sum256(bytes.Join(tsxHashes, []byte{}))
+	return txHash[:]
 }
 
 // CreateBlock will generate a new Block instance with a pointer
-func CreateBlock(data string, prevHash []byte) *Block {
+func CreateBlock(tsx []*Transaction, prevHash []byte) *Block {
 	block := &Block{
-		Hash:     []byte{},
-		Data:     []byte(data),
-		PrevHash: prevHash,
-		Nonce:    0,
+		Hash:         []byte{},
+		Transactions: tsx,
+		PrevHash:     prevHash,
+		Nonce:        0,
 	}
 
 	pow := NewProof(block)
@@ -30,8 +47,8 @@ func CreateBlock(data string, prevHash []byte) *Block {
 }
 
 // Genesis will create the first block in the blockchain
-func genesis() *Block {
-	return CreateBlock("genesis", []byte{})
+func Genesis(coinbase *Transaction) *Block {
+	return CreateBlock([]*Transaction{coinbase}, []byte{})
 }
 
 // Serialize will serializer the block struct in to bytes
@@ -55,7 +72,15 @@ func Deserialize(data []byte) *Block {
 	return &block
 }
 
+// CheckError will check if there is any error an then gracefuly shutdown the system
 func CheckError(err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println(r)
+			runtime.Goexit()
+		}
+	}()
+
 	if err != nil {
 		log.Panic(err)
 	}

@@ -2,12 +2,16 @@ package blockchain
 
 import (
 	"fmt"
+	"os"
+	"runtime"
 
 	"github.com/dgraph-io/badger/v3"
 )
 
 const (
-	dbPath = "./tmp/blocks"
+	dbPath      = "./tmp/blocks"
+	dbFile      = "./tmp/blocks/MANIFEST"
+	genesisData = "First Transaction from genesis"
 )
 
 type BlockChain struct {
@@ -20,32 +24,62 @@ type BlockChainIterator struct {
 	Database    *badger.DB
 }
 
-// InitBLockChain will start the blockchain
-func InitBLockChain() *BlockChain {
+//DBexists will check if a badger db already exists in the db path
+func DBexists() bool {
+	if _, err := os.Stat(dbFile); os.IsNotExist(err) {
+		return false
+	}
+
+	return true
+}
+
+// ContinueBlockchain will continue the blockchain with the last hashed block
+func ContinueBlockChain(address string) *BlockChain {
+	if !DBexists() {
+		fmt.Println("No existing blockchain found, go and create one!")
+		runtime.Goexit()
+	}
+
 	var lastHash []byte
+	db, err := badger.Open(badger.DefaultOptions(dbPath))
+	CheckError(err)
+
+	err = db.Update(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("lh"))
+		CheckError(err)
+
+		lastHash, err = item.ValueCopy(nil)
+		return err
+	})
+
+	CheckError(err)
+	blockChain := &BlockChain{lastHash, db}
+	return blockChain
+}
+
+// InitBLockChain will start the blockchain
+func InitBLockChain(address string) *BlockChain {
+	var lastHash []byte
+
+	if DBexists() {
+		fmt.Println("Blockchain already exists")
+		runtime.Goexit()
+	}
 
 	db, err := badger.Open(badger.DefaultOptions(dbPath))
 	CheckError(err)
 
 	err = db.Update(func(txn *badger.Txn) error {
-		if _, err = txn.Get([]byte("lh")); err == badger.ErrKeyNotFound {
-			fmt.Println("No existing blockchain found")
-			genesis := genesis()
-			fmt.Println("genesis proved")
+		cbtx := CoinbaseTx(address, genesisData)
+		genesis := Genesis(cbtx)
+		fmt.Println("Genesis Created")
 
-			err = txn.Set(genesis.Hash, genesis.Serialize())
-			CheckError(err)
-			err = txn.Set([]byte("lh"), genesis.Hash)
+		err := txn.Set(genesis.Hash, genesis.Serialize())
+		CheckError(err)
 
-			lastHash = genesis.Hash
-			return err
-		} else {
-			item, err := txn.Get([]byte("lh"))
-			CheckError(err)
-
-			lastHash, err = item.ValueCopy(nil)
-			return err
-		}
+		err = txn.Set([]byte("lh"), genesis.Hash)
+		lastHash = genesis.Hash
+		return err
 	})
 
 	CheckError(err)
@@ -54,7 +88,7 @@ func InitBLockChain() *BlockChain {
 }
 
 // AddBlock will add a block to the block chain
-func (chain *BlockChain) AddBlock(data string) {
+func (chain *BlockChain) AddBlock(transactions []*Transaction) {
 	var lastHash []byte
 
 	err := chain.Database.View(func(txn *badger.Txn) error {
@@ -66,7 +100,7 @@ func (chain *BlockChain) AddBlock(data string) {
 	})
 
 	CheckError(err)
-	newBlock := CreateBlock(data, lastHash)
+	newBlock := CreateBlock(transactions, lastHash)
 
 	err = chain.Database.Update(func(txn *badger.Txn) error {
 		err := txn.Set(newBlock.Hash, newBlock.Serialize())
@@ -105,3 +139,23 @@ func (iter *BlockChainIterator) Next() *Block {
 	iter.CurrentHash = block.PrevHash
 	return block
 }
+
+// FindUnspentTransactions will find all unspent transactions assing to one address.
+// Unspent transactions are transactions that have outputs wich are not referenced
+// by other inputs. This is important because if there is an output hassent been spent
+// that means that those tokens still exists for a certain user.
+// func (chain *BlockChain) FindUnspentTransactions(address string) []Transaction {
+// 	var unspentTsx []Transaction
+// 	spentTxos := make(map[string][]int)
+// 	iter := chain.Iterator()
+
+// 	for {
+// 		block := iter.Next()
+
+// 		if len(block.PrevHash) == 0 {
+// 			break // this is the genesis
+// 		}
+// 	}
+
+// 	return unspentTsx
+// }
