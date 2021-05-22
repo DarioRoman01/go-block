@@ -2,6 +2,7 @@ package blockchain
 
 import (
 	"bytes"
+	"encoding/gob"
 
 	"github.com/Haizza1/go-block/wallet"
 )
@@ -9,6 +10,10 @@ import (
 type TxOutput struct {
 	Value      int    // represents the value in tokens
 	PubKeyHash []byte // represents the public key
+}
+
+type TxOutputs struct {
+	Outputs []TxOutput // represents the outputs in the list of outputs
 }
 
 type TxInput struct {
@@ -24,6 +29,24 @@ func NewTXOutput(value int, address string) *TxOutput {
 	txo.Lock([]byte(address))
 
 	return txo
+}
+
+// serialize will serialize the outputs struct into bytes
+func (outs TxOutputs) Serialize() []byte {
+	var buff bytes.Buffer
+	encode := gob.NewEncoder(&buff)
+	err := encode.Encode(outs)
+	CheckError(err)
+	return buff.Bytes()
+}
+
+// Deserialize will deserialize a chunk of bytes into a TxOutputs struct
+func DeserializeOutputs(data []byte) TxOutputs {
+	var outputs TxOutputs
+	decode := gob.NewDecoder(bytes.NewReader(data))
+	err := decode.Decode(&outputs)
+	CheckError(err)
+	return outputs
 }
 
 // UsesKey will check if the given publickey in equal
