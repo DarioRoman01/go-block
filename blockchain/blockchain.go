@@ -156,11 +156,11 @@ func (chain *BlockChain) FindUnspentTransactions(pubKeyHash []byte) []Transactio
 	for {
 		block := iter.Next()
 
-		for _, tsx := range block.Transactions {
-			txID := hex.EncodeToString(tsx.ID)
+		for _, tx := range block.Transactions {
+			txID := hex.EncodeToString(tx.ID)
 
 		Outputs:
-			for outIdx, out := range tsx.Outputs {
+			for outIdx, out := range tx.Outputs {
 				if spentTxos[txID] != nil {
 					for _, spentOut := range spentTxos[txID] {
 						if spentOut == outIdx {
@@ -170,12 +170,12 @@ func (chain *BlockChain) FindUnspentTransactions(pubKeyHash []byte) []Transactio
 				}
 
 				if out.IsLockedWithKey(pubKeyHash) {
-					unspentTsx = append(unspentTsx, *tsx)
+					unspentTsx = append(unspentTsx, *tx)
 				}
 			}
 
-			if !tsx.IsCoinBase() {
-				for _, in := range tsx.Inputs {
+			if !tx.IsCoinBase() {
+				for _, in := range tx.Inputs {
 					if in.UsesKey(pubKeyHash) {
 						inTxID := hex.EncodeToString(in.ID)
 						spentTxos[inTxID] = append(spentTxos[inTxID], in.Out)
@@ -283,3 +283,6 @@ func (chain *BlockChain) VerifyTransaction(tx *Transaction) bool {
 
 	return tx.Verify(prevTxs)
 }
+
+// has money 128arpUF8nrvzDKpkHhL7NrtGnHFZqNQkMtoNPgpxs8N6Nu5QqL
+// no moneey 12TxQAbXQLP6266KzHgpiQJXKpbMCN4XJS37oXrAhWvEvwFtX6g

@@ -63,8 +63,8 @@ func CoinbaseTx(to, data string) *Transaction {
 	if data == "" {
 		data = fmt.Sprintf("Coins to %s", to)
 	}
-
-	txin := TxInput{ID: []byte{}, Out: -1, Signature: []byte(data)}
+	// txin := TxInput{[]byte{}, -1, nil, []byte(data)}
+	txin := TxInput{ID: []byte{}, Out: -1, Signature: nil, PubKey: []byte(data)}
 	txout := NewTXOutput(100, to)
 
 	tx := Transaction{
