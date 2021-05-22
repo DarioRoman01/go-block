@@ -148,8 +148,8 @@ func (iter *BlockChainIterator) Next() *Block {
 // Unspent transactions are transactions that have outputs wich are not referenced
 // by other inputs. This is important because if there is an output hassent been spent
 // that means that those tokens still exists for a certain user.
-func (chain *BlockChain) FindUnspentTransactions(pubKeyHash []byte) []Transaction {
-	var unspentTsx []Transaction
+func (chain *BlockChain) FindUnspentTransactions() map[string]TxOutputs {
+	unspentTxos := make(map[string]TxOutputs)
 	spentTxos := make(map[string][]int)
 	iter := chain.Iterator()
 
@@ -169,17 +169,16 @@ func (chain *BlockChain) FindUnspentTransactions(pubKeyHash []byte) []Transactio
 					}
 				}
 
-				if out.IsLockedWithKey(pubKeyHash) {
-					unspentTsx = append(unspentTsx, *tx)
-				}
+				outs := unspentTxos[txID]
+				outs.Outputs = append(outs.Outputs, out)
+				unspentTxos[txID] = outs
+
 			}
 
 			if !tx.IsCoinBase() {
 				for _, in := range tx.Inputs {
-					if in.UsesKey(pubKeyHash) {
-						inTxID := hex.EncodeToString(in.ID)
-						spentTxos[inTxID] = append(spentTxos[inTxID], in.Out)
-					}
+					inTxID := hex.EncodeToString(in.ID)
+					spentTxos[inTxID] = append(spentTxos[inTxID], in.Out)
 				}
 			}
 		}
@@ -189,52 +188,7 @@ func (chain *BlockChain) FindUnspentTransactions(pubKeyHash []byte) []Transactio
 		}
 	}
 
-	return unspentTsx
-}
-
-// Find unspent transaction outputs will return all the unspent
-// outputs of the current user.
-func (chain *BlockChain) FindUTXO(pubKeyHash []byte) []TxOutput {
-	var Utxo []TxOutput
-	unspentTransactoin := chain.FindUnspentTransactions(pubKeyHash)
-
-	for _, tx := range unspentTransactoin {
-		for _, out := range tx.Outputs {
-			if out.IsLockedWithKey(pubKeyHash) {
-				Utxo = append(Utxo, out)
-			}
-		}
-	}
-
-	return Utxo
-}
-
-// Find Spendable outputs will enable create normal transactions wich are not coinbase transactions
-// this function will ensure that the user have the coins to make the transaction. something like
-// the amount of coins that the user have
-func (chain *BlockChain) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[string][]int) {
-	unspentOuts := make(map[string][]int)
-	unspentTxs := chain.FindUnspentTransactions(pubKeyHash)
-	accumulated := 0
-
-Work:
-	for _, tx := range unspentTxs {
-		txID := hex.EncodeToString(tx.ID)
-
-		for outIdx, out := range tx.Outputs {
-			if out.IsLockedWithKey(pubKeyHash) && accumulated < amount {
-				accumulated += out.Value
-				unspentOuts[txID] = append(unspentOuts[txID], outIdx)
-
-				if accumulated >= amount {
-					break Work
-				}
-			}
-
-		}
-	}
-
-	return accumulated, unspentOuts
+	return unspentTxos
 }
 
 // FindTransaction will check in the blockchain if the given transaction ID exists
@@ -283,6 +237,3 @@ func (chain *BlockChain) VerifyTransaction(tx *Transaction) bool {
 
 	return tx.Verify(prevTxs)
 }
-
-// has money 128arpUF8nrvzDKpkHhL7NrtGnHFZqNQkMtoNPgpxs8N6Nu5QqL
-// no moneey 12TxQAbXQLP6266KzHgpiQJXKpbMCN4XJS37oXrAhWvEvwFtX6g

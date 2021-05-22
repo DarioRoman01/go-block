@@ -79,7 +79,7 @@ func CoinbaseTx(to, data string) *Transaction {
 
 // NewTransaction will create a new transacion and validate if the user has enough
 // coins to make the transaction
-func NewTransaction(from, to string, amount int, chain *BlockChain) *Transaction {
+func NewTransaction(from, to string, amount int, utxo *UTXOSet) *Transaction {
 	defer HandlePanic()
 	var inputs []TxInput
 	var outputs []TxOutput
@@ -89,7 +89,7 @@ func NewTransaction(from, to string, amount int, chain *BlockChain) *Transaction
 	w := wallets.GetWallet(from)
 	pubKeyHash := wallet.PublicKeyHash(w.PublicKey)
 
-	acc, validOutputs := chain.FindSpendableOutputs(pubKeyHash, amount)
+	acc, validOutputs := utxo.FindSpendableOutputs(pubKeyHash, amount)
 	if acc < amount {
 		log.Panic("Error: not enough funds")
 	}
@@ -111,7 +111,7 @@ func NewTransaction(from, to string, amount int, chain *BlockChain) *Transaction
 
 	tx := Transaction{ID: nil, Inputs: inputs, Outputs: outputs}
 	tx.ID = tx.Hash()
-	chain.SingTransaction(&tx, w.PrivateKey)
+	utxo.BlockChain.SingTransaction(&tx, w.PrivateKey)
 	return &tx
 }
 
