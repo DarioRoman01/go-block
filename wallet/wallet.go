@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -30,6 +31,19 @@ func (w Wallet) Address() []byte {
 	fullHash := append(versionedHash, checksum...)
 	address := Base58Encode(fullHash)
 	return address
+}
+
+// Validate address will check if the given address is valid
+// decoding the address with base58 algorithm and validate all the parts of the hash
+// address -> FullHash -> version -> pubkey -> checksum
+func ValidateAddress(address string) bool {
+	pubKeyHash := Base58Decode([]byte(address))
+	actualCheckSum := pubKeyHash[len(pubKeyHash)-checksumLength:]
+	version := pubKeyHash[0]
+	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-checksumLength]
+	targetCheckSum := Checksum(append([]byte{version}, pubKeyHash...))
+
+	return bytes.Equal(actualCheckSum, targetCheckSum)
 }
 
 // NewKeyPair will create a new public and private key for the user
@@ -67,8 +81,7 @@ func Checksum(payload []byte) []byte {
 	return secondHash[:checksumLength]
 }
 
-// handle will check if the error is not
-// nil and gracefully shutdown the system
+// handle will check if the error is not nil
 func handle(err error) {
 	if err != nil {
 		log.Panic(err)
