@@ -1,25 +1,46 @@
 package blockchain
 
+import (
+	"bytes"
+
+	"github.com/Haizza1/go-block/wallet"
+)
+
 type TxOutput struct {
-	Value  int    // represents the value in tokens
-	PubKey string // represents the public key
+	Value      int    // represents the value in tokens
+	PubKeyHash []byte // represents the public key
 }
 
 type TxInput struct {
-	ID  []byte // represents the transaction that the output is
-	Out int    // represents the index where the output appears
-	Sig string // represents the data wich is use in the output pubkey
+	ID        []byte // represents the transaction that the output is
+	Out       int    // represents the index where the output appears
+	Signature []byte // represents the data wich is use in the output pubkey
+	PubKey    []byte // represents the public used in the transaction
 }
 
-// CanUnlock check if the given data is equal to the
-// input sig wich is the pub key of the transaction
-// if are equal means that the data of the input can be unlocked
-func (in *TxInput) CanUnlock(data string) bool {
-	return in.Sig == data
+// NewTXOuput will generate a new output instance
+func NewTXOutput(value int, address string) *TxOutput {
+	txo := &TxOutput{Value: value, PubKeyHash: nil}
+	txo.Lock([]byte(address))
+
+	return txo
 }
 
-// CanBeUnlocked check if the given data is equal to the
-// output pub key if are equal means that the data of the output can be unlocked
-func (out *TxOutput) CanBeUnlocked(data string) bool {
-	return out.PubKey == data
+// UsesKey will check if the given publickey in equal
+// to the transaction input pubkey hashed
+func (in *TxInput) UsesKey(pubKeyHash []byte) bool {
+	lockingHash := wallet.PublicKeyHash(in.PubKey)
+	return bytes.Equal(lockingHash, pubKeyHash)
+}
+
+// Lock will set a hashed pubkey with base58 algorithm to the output
+func (out *TxOutput) Lock(address []byte) {
+	pubKeyHash := wallet.Base58Decode(address)
+	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
+	out.PubKeyHash = pubKeyHash
+}
+
+// IsLocked with key will check is the given hash has been locked
+func (out *TxOutput) IsLockedWithKey(pubKeyHash []byte) bool {
+	return bytes.Equal(out.PubKeyHash, pubKeyHash)
 }
