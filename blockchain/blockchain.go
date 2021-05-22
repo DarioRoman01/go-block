@@ -1,12 +1,15 @@
 package blockchain
 
 import (
+	"bytes"
+	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
 	"os"
 	"runtime"
 
 	"github.com/dgraph-io/badger/v3"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -145,7 +148,7 @@ func (iter *BlockChainIterator) Next() *Block {
 // Unspent transactions are transactions that have outputs wich are not referenced
 // by other inputs. This is important because if there is an output hassent been spent
 // that means that those tokens still exists for a certain user.
-func (chain *BlockChain) FindUnspentTransactions(address string) []Transaction {
+func (chain *BlockChain) FindUnspentTransactions(pubKeyHash []byte) []Transaction {
 	var unspentTsx []Transaction
 	spentTxos := make(map[string][]int)
 	iter := chain.Iterator()
@@ -166,14 +169,14 @@ func (chain *BlockChain) FindUnspentTransactions(address string) []Transaction {
 					}
 				}
 
-				if out.CanBeUnlocked(address) {
+				if out.IsLockedWithKey(pubKeyHash) {
 					unspentTsx = append(unspentTsx, *tsx)
 				}
 			}
 
 			if !tsx.IsCoinBase() {
 				for _, in := range tsx.Inputs {
-					if in.CanUnlock(address) {
+					if in.UsesKey(pubKeyHash) {
 						inTxID := hex.EncodeToString(in.ID)
 						spentTxos[inTxID] = append(spentTxos[inTxID], in.Out)
 					}
@@ -191,13 +194,13 @@ func (chain *BlockChain) FindUnspentTransactions(address string) []Transaction {
 
 // Find unspent transaction outputs will return all the unspent
 // outputs of the current user.
-func (chain *BlockChain) FindUTXO(address string) []TxOutput {
+func (chain *BlockChain) FindUTXO(pubKeyHash []byte) []TxOutput {
 	var Utxo []TxOutput
-	unspentTransactoin := chain.FindUnspentTransactions(address)
+	unspentTransactoin := chain.FindUnspentTransactions(pubKeyHash)
 
 	for _, tx := range unspentTransactoin {
 		for _, out := range tx.Outputs {
-			if out.CanBeUnlocked(address) {
+			if out.IsLockedWithKey(pubKeyHash) {
 				Utxo = append(Utxo, out)
 			}
 		}
@@ -209,9 +212,9 @@ func (chain *BlockChain) FindUTXO(address string) []TxOutput {
 // Find Spendable outputs will enable create normal transactions wich are not coinbase transactions
 // this function will ensure that the user have the coins to make the transaction. something like
 // the amount of coins that the user have
-func (chain *BlockChain) FindSpendableOutputs(address string, amount int) (int, map[string][]int) {
+func (chain *BlockChain) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[string][]int) {
 	unspentOuts := make(map[string][]int)
-	unspentTxs := chain.FindUnspentTransactions(address)
+	unspentTxs := chain.FindUnspentTransactions(pubKeyHash)
 	accumulated := 0
 
 Work:
@@ -219,7 +222,7 @@ Work:
 		txID := hex.EncodeToString(tx.ID)
 
 		for outIdx, out := range tx.Outputs {
-			if out.CanBeUnlocked(address) && accumulated < amount {
+			if out.IsLockedWithKey(pubKeyHash) && accumulated < amount {
 				accumulated += out.Value
 				unspentOuts[txID] = append(unspentOuts[txID], outIdx)
 
@@ -232,4 +235,51 @@ Work:
 	}
 
 	return accumulated, unspentOuts
+}
+
+// FindTransaction will check in the blockchain if the given transaction ID exists
+// if exits its return else we return a error
+func (chain *BlockChain) FindTransaction(ID []byte) (Transaction, error) {
+	iter := chain.Iterator()
+
+	for {
+		block := iter.Next()
+
+		for _, tx := range block.Transactions {
+			if bytes.Equal(tx.ID, ID) {
+				return *tx, nil
+			}
+		}
+
+		if len(block.PrevHash) == 0 {
+			break // this is the genesis
+		}
+	}
+
+	return Transaction{}, errors.New("Transaction does not exists")
+}
+
+// SignTransaction will sign the transaction with the user private key
+func (chain *BlockChain) SingTransaction(tx *Transaction, privKey ecdsa.PrivateKey) {
+	prevTxs := make(map[string]Transaction)
+
+	for _, in := range tx.Inputs {
+		prevTx, err := chain.FindTransaction(in.ID)
+		CheckError(err)
+		prevTxs[hex.EncodeToString(prevTx.ID)] = prevTx
+	}
+
+	tx.Sign(privKey, prevTxs)
+}
+
+// VerifyTransaction will check if the given transaction is valid
+func (chain *BlockChain) VerifyTransaction(tx *Transaction) bool {
+	prevTxs := make(map[string]Transaction)
+	for _, in := range tx.Inputs {
+		prevTx, err := chain.FindTransaction(in.ID)
+		CheckError(err)
+		prevTxs[hex.EncodeToString(prevTx.ID)] = prevTx
+	}
+
+	return tx.Verify(prevTxs)
 }
