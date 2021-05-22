@@ -63,6 +63,7 @@ func MakeWallet() *Wallet {
 	return &Wallet{PrivateKey: private, PublicKey: public}
 }
 
+// publicKeyHash will generate a hash of the given publickey
 func PublicKeyHash(pubKey []byte) []byte {
 	pubHash := sha256.Sum256(pubKey)
 	hasher := sha256.New()
