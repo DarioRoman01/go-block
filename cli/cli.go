@@ -111,7 +111,7 @@ func (cli *CommandLine) Run() {
 	sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
 	printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
 	listAddressesCmd := flag.NewFlagSet("listaddresses", flag.ExitOnError)
-	createWalletCmd := flag.NewFlagSet("createWalllet", flag.ExitOnError)
+	createWalletCmd := flag.NewFlagSet("createWallet", flag.ExitOnError)
 
 	getBalanceAddress := getBalanceCmd.String("address", "", "The address to get balance for")
 	createBLockChainAddress := createBLockchainCmd.String("address", "", "The address to send genesis block reward to")
@@ -136,7 +136,7 @@ func (cli *CommandLine) Run() {
 		err := createBLockchainCmd.Parse(os.Args[2:])
 		blockchain.CheckError(err)
 
-	case "createWalllet":
+	case "createWallet":
 		err := createWalletCmd.Parse(os.Args[2:])
 		blockchain.CheckError(err)
 
