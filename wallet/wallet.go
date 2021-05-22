@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
-	"runtime"
+	"log"
 )
 
 const (
@@ -76,14 +76,7 @@ func Checksum(payload []byte) []byte {
 // handle will check if the error is not
 // nil and gracefully shutdown the system
 func handle(err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println(err)
-			runtime.Goexit()
-		}
-	}()
-
 	if err != nil {
-		panic(err)
+		log.Panic(err)
 	}
 }
