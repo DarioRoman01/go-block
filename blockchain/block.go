@@ -2,7 +2,6 @@ package blockchain
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
 	"log"
@@ -20,14 +19,13 @@ type Block struct {
 // to provide a unique reperesentation of all the transactions
 func (b *Block) HashTransactions() []byte {
 	var tsxHashes [][]byte
-	var txHash [32]byte
 
 	for _, tx := range b.Transactions {
-		tsxHashes = append(tsxHashes, tx.ID)
+		tsxHashes = append(tsxHashes, tx.Serialize())
 	}
 
-	txHash = sha256.Sum256(bytes.Join(tsxHashes, []byte{}))
-	return txHash[:]
+	tree := NewMerkletree(tsxHashes)
+	return tree.RootNode.Data
 }
 
 // CreateBlock will generate a new Block instance with a pointer
