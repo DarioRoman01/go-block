@@ -229,6 +229,10 @@ func (chain *BlockChain) SingTransaction(tx *Transaction, privKey ecdsa.PrivateK
 
 // VerifyTransaction will check if the given transaction is valid
 func (chain *BlockChain) VerifyTransaction(tx *Transaction) bool {
+	if tx.IsCoinBase() {
+		return true
+	}
+
 	prevTxs := make(map[string]Transaction)
 	for _, in := range tx.Inputs {
 		prevTx, err := chain.FindTransaction(in.ID)

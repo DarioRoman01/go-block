@@ -45,27 +45,18 @@ func (tx *Transaction) Hash() []byte {
 	return hash[:]
 }
 
-// setID will generate a hashed id for the transaction
-func (tx *Transaction) setID() {
-	var encoded bytes.Buffer
-	var hash [32]byte
-
-	encode := gob.NewEncoder(&encoded)
-	err := encode.Encode(tx)
-	CheckError(err)
-
-	hash = sha256.Sum256(encoded.Bytes())
-	tx.ID = hash[:]
-}
-
-// CoinbasTx will generate a new transaction instance with the given data
+// CoinbasTx will generate the coinbase transaction
+// wich is the first transaction in the chain
 func CoinbaseTx(to, data string) *Transaction {
 	if data == "" {
-		data = fmt.Sprintf("Coins to %s", to)
+		randData := make([]byte, 24)
+		_, err := rand.Read(randData)
+		CheckError(err)
+		data = fmt.Sprintf("%x", randData)
 	}
-	// txin := TxInput{[]byte{}, -1, nil, []byte(data)}
+
 	txin := TxInput{ID: []byte{}, Out: -1, Signature: nil, PubKey: []byte(data)}
-	txout := NewTXOutput(100, to)
+	txout := NewTXOutput(20, to)
 
 	tx := Transaction{
 		ID:      nil,
@@ -73,7 +64,7 @@ func CoinbaseTx(to, data string) *Transaction {
 		Outputs: []TxOutput{*txout},
 	}
 
-	tx.setID()
+	tx.ID = tx.Hash()
 	return &tx
 }
 
