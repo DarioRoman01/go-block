@@ -129,7 +129,8 @@ func (cli *CommandLine) send(from, to string, amount int) {
 	defer chain.Database.Close()
 
 	tx := blockchain.NewTransaction(from, to, amount, UTXIOSet)
-	chain.AddBlock([]*blockchain.Transaction{tx})
+	block := chain.AddBlock([]*blockchain.Transaction{tx})
+	UTXIOSet.Update(block)
 	fmt.Println("Success!")
 }
 

@@ -92,7 +92,7 @@ func InitBLockChain(address string) *BlockChain {
 }
 
 // AddBlock will add a block to the block chain
-func (chain *BlockChain) AddBlock(transactions []*Transaction) {
+func (chain *BlockChain) AddBlock(transactions []*Transaction) *Block {
 	var lastHash []byte
 
 	err := chain.Database.View(func(txn *badger.Txn) error {
@@ -116,6 +116,7 @@ func (chain *BlockChain) AddBlock(transactions []*Transaction) {
 	})
 
 	CheckError(err)
+	return newBlock
 }
 
 // Iterator will return a new block chain iterator instance

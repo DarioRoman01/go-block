@@ -91,6 +91,8 @@ func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[s
 	return accumulated, unspentOuts
 }
 
+// count transactins will count all the transactions of
+// unspent transactions outputs in the blockchain
 func (u UTXOSet) CountTransactions() int {
 	db := u.BlockChain.Database
 	counter := 0
