@@ -74,7 +74,7 @@ func Deserialize(data []byte) *Block {
 func CheckError(err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println(r)
+			fmt.Println("Error: ", r)
 			runtime.Goexit()
 		}
 	}()

@@ -113,7 +113,7 @@ func (u UTXOSet) CountTransactions() int {
 	return counter
 }
 
-// update will update the utxos set in the badger db
+// update will update the unspent transactions set in the badger db
 func (u *UTXOSet) Update(block *Block) {
 	defer HandlePanic()
 
