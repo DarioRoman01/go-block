@@ -35,6 +35,18 @@ func (tx *Transaction) Serialize() []byte {
 	return encoded.Bytes()
 }
 
+// Deseraialze transaction will take the chunk of bytes and
+// decoded them into a transaction struct
+func DeserializeTransaction(data []byte) Transaction {
+	var transaction Transaction
+
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+	err := decoder.Decode(&transaction)
+	CheckError(err)
+
+	return transaction
+}
+
 // Hash will create a new hash with the transaction data
 func (tx *Transaction) Hash() []byte {
 	var hash [32]byte
@@ -70,14 +82,11 @@ func CoinbaseTx(to, data string) *Transaction {
 
 // NewTransaction will create a new transacion and validate if the user has enough
 // coins to make the transaction
-func NewTransaction(from, to string, amount int, utxo *UTXOSet) *Transaction {
+func NewTransaction(w *wallet.Wallet, to string, amount int, utxo *UTXOSet) *Transaction {
 	defer HandlePanic()
 	var inputs []TxInput
 	var outputs []TxOutput
 
-	wallets, err := wallet.CreateWallets()
-	CheckError(err)
-	w := wallets.GetWallet(from)
 	pubKeyHash := wallet.PublicKeyHash(w.PublicKey)
 
 	acc, validOutputs := utxo.FindSpendableOutputs(pubKeyHash, amount)
@@ -95,6 +104,7 @@ func NewTransaction(from, to string, amount int, utxo *UTXOSet) *Transaction {
 		}
 	}
 
+	from := fmt.Sprintf("%s", w.Address())
 	outputs = append(outputs, *NewTXOutput(amount, to))
 	if acc > amount {
 		outputs = append(outputs, *NewTXOutput(acc-amount, from))
