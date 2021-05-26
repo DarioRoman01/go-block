@@ -70,7 +70,7 @@ func Deserialize(data []byte) *Block {
 	return &block
 }
 
-// CheckError will check if there is any error an then gracefuly shutdown the system
+// CheckError will check if there is any error and then gracefuly shutdown the system
 func CheckError(err error) {
 	defer func() {
 		if r := recover(); r != nil {

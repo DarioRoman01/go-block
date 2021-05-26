@@ -198,6 +198,39 @@ func HandleAddr(request []byte) {
 	RequestBlocks()
 }
 
+func HandleInv(request []byte, chain *blockchain.BlockChain) {
+	var payload Inv
+
+	if err := DeserializePayload(request, &payload); err != nil {
+		log.Panic(err)
+	}
+
+	fmt.Printf("Recivied inventory with %d, %s\n", len(payload.Items), payload.Type)
+
+	if payload.Type == "block" {
+		blocksInTransit = payload.Items
+		blockHash := payload.Items[0]
+		SendGetData(payload.AddrFrom, "block", blockHash)
+
+		newInTransit := [][]byte{}
+
+		for _, v := range blocksInTransit {
+			if !bytes.Equal(v, blockHash) {
+				newInTransit = append(newInTransit, v)
+			}
+		}
+
+		blocksInTransit = newInTransit
+	}
+
+	if payload.Type == "tx" {
+		txID := payload.Items[0]
+		if memoryPool[hex.EncodeToString(txID)].ID == nil {
+			SendGetData(payload.AddrFrom, "tx", txID)
+		}
+	}
+}
+
 // handle block will handle the address get block request
 func HandeBlock(request []byte, chain *blockchain.BlockChain) {
 	var payload Block
@@ -224,7 +257,7 @@ func HandeBlock(request []byte, chain *blockchain.BlockChain) {
 }
 
 // handle get block will handle the get blocks request
-func HanleGetBlocks(request []byte, chain *blockchain.BlockChain) {
+func HandleGetBlocks(request []byte, chain *blockchain.BlockChain) {
 	var payload GetBlocks
 	if err := DeserializePayload(request, &payload); err != nil {
 		log.Panic(err)
@@ -301,6 +334,28 @@ func MineTx(chain *blockchain.BlockChain) {
 		return
 	}
 
+	cbTx := blockchain.CoinbaseTx(minerAddress, "")
+	txs = append(txs, cbTx)
+	newBlock := blockchain.Block{} //chain.MineBlock(txs)
+
+	UtxoSet := blockchain.UTXOSet{BlockChain: chain}
+	UtxoSet.Reindex()
+	fmt.Println("New Block mined")
+
+	for _, tx := range txs {
+		txID := hex.EncodeToString(tx.ID)
+		delete(memoryPool, txID)
+	}
+
+	for _, node := range KnownNodes {
+		if node != nodeAddress {
+			SendInv(node, "block", [][]byte{newBlock.Hash})
+		}
+	}
+
+	if len(memoryPool) > 0 {
+		MineTx(chain)
+	}
 }
 
 // handle version will handle the get version request
@@ -323,16 +378,6 @@ func HandleVersion(request []byte, chain *blockchain.BlockChain) {
 	if !NodeIsKnown(payload.AddrFrom) {
 		KnownNodes = append(KnownNodes, payload.AddrFrom)
 	}
-
-	// cbTx := blockchain.CoinbaseTx(minerAddress, "")
-	// txs := append(txs, cbTx)
-
-	// newBlock := blockchain.Block{} //chain.MineBlock(txs)
-	// UtxoSet := blockchain.UTXOSet{BlockChain: chain}
-	// UtxoSet.Reindex()
-
-	// fmt.Println("New Block mined")
-
 }
 
 // HandleConnection will handle connections of the current node
@@ -348,6 +393,27 @@ func HandleConnection(conn net.Conn, chain *blockchain.BlockChain) {
 	fmt.Printf("Received %s command\n", command)
 
 	switch command {
+	case "addr":
+		HandleAddr(req)
+
+	case "block":
+		HandeBlock(req, chain)
+
+	case "inv":
+		HandleInv(req, chain)
+
+	case "getblcoks":
+		HandleGetBlocks(req, chain)
+
+	case "getdata":
+		HandleGetData(req, chain)
+
+	case "tx":
+		HandleTx(req, chain)
+
+	case "version":
+		HandleVersion(req, chain)
+
 	default:
 		fmt.Println("Unkown Command")
 	}
