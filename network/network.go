@@ -198,6 +198,7 @@ func HandleAddr(request []byte) {
 	RequestBlocks()
 }
 
+// handle inventory will handle the get Inv request
 func HandleInv(request []byte, chain *blockchain.BlockChain) {
 	var payload Inv
 
@@ -318,6 +319,7 @@ func HandleTx(request []byte, chain *blockchain.BlockChain) {
 	}
 }
 
+// mineTx will will nine the transaction
 func MineTx(chain *blockchain.BlockChain) {
 	var txs []*blockchain.Transaction
 
@@ -416,6 +418,35 @@ func HandleConnection(conn net.Conn, chain *blockchain.BlockChain) {
 
 	default:
 		fmt.Println("Unkown Command")
+	}
+}
+
+// StartServer will start the server with the given node id
+func StartServer(nodeID, mineAddress string) {
+	nodeAddress = fmt.Sprintf("localhost:%s", nodeID)
+	minerAddress = mineAddress
+	ln, err := net.Listen(protocol, nodeAddress)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	defer ln.Close()
+
+	chain := blockchain.ContinueBlockChain(nodeID)
+	defer chain.Database.Close()
+	go CloseDB(chain)
+
+	if nodeAddress != KnownNodes[0] {
+		SendVersion(KnownNodes[0], chain)
+	}
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Panic(err)
+		}
+
+		go HandleConnection(conn, chain)
 	}
 }
 
