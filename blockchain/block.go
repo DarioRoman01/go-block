@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"time"
 )
 
 type Block struct {
+	TimeStamp    int64          // reprensents the time when the block was created
 	Hash         []byte         // represents the hash of the block
 	Transactions []*Transaction // represents the transactions of the block
 	PrevHash     []byte         // represents last block hash
-	Nonce        int            // represents the diffycul
+	Nonce        int            // represents the diffyculty
+	Heigth       int            // represents the heigth of the current block
 }
 
 // HashTransactions will allow to use a hashing mechanism
@@ -29,12 +32,14 @@ func (b *Block) HashTransactions() []byte {
 }
 
 // CreateBlock will generate a new Block instance with a pointer
-func CreateBlock(tsx []*Transaction, prevHash []byte) *Block {
+func CreateBlock(tsx []*Transaction, prevHash []byte, heigth int) *Block {
 	block := &Block{
+		TimeStamp:    time.Now().Unix(),
 		Hash:         []byte{},
 		Transactions: tsx,
 		PrevHash:     prevHash,
 		Nonce:        0,
+		Heigth:       heigth,
 	}
 
 	pow := NewProof(block)
@@ -46,7 +51,7 @@ func CreateBlock(tsx []*Transaction, prevHash []byte) *Block {
 
 // Genesis will create the first block in the blockchain
 func Genesis(coinbase *Transaction) *Block {
-	return CreateBlock([]*Transaction{coinbase}, []byte{})
+	return CreateBlock([]*Transaction{coinbase}, []byte{}, 0)
 }
 
 // Serialize will serializer the block struct in to bytes
