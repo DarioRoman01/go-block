@@ -2,19 +2,13 @@ package network
 
 import (
 	"bytes"
-	"encoding/gob"
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
-	"os"
-	"runtime"
-	"syscall"
 
 	"github.com/Haizza1/go-block/blockchain"
-	"github.com/vrecan/death/v3"
 )
 
 const (
@@ -67,41 +61,11 @@ type Version struct {
 	AddrFrom   string // reprensents the address of the current node
 }
 
-// CmdToBytes will work like a serialize function for the
-// commands recibed by the command line package
-func CmdToBytes(cmd string) []byte {
-	var bytes [commandLength]byte
-
-	for i, v := range cmd {
-		bytes[i] = byte(v)
-	}
-
-	return bytes[:]
-}
-
-// BytesToCmd will work like a deserialize function transforming
-// the given bytes to a string
-func BytesToCmd(bytes []byte) string {
-	var cmd []byte
-
-	for _, v := range bytes {
-		if v != 0x0 {
-			cmd = append(cmd, v)
-		}
-	}
-
-	return fmt.Sprintf("%s", cmd)
-}
-
 // Request block will call send get block for each node in the list
 func RequestBlocks() {
 	for _, node := range KnownNodes {
 		SendGetBlock(node)
 	}
-}
-
-func ExtractCmd(request []byte) []byte {
-	return request[:commandLength]
 }
 
 // send address will create the request of the address to be send
@@ -141,8 +105,8 @@ func SendTx(addr string, txn *blockchain.Transaction) {
 
 // SendVersion will the create request of the Version to be send
 func SendVersion(addr string, chain *blockchain.BlockChain) {
-	// bestHeigth := chain.GetBestHeigth()
-	payload := GobEncode(Version{Version: version, BestHeigth: 0, AddrFrom: nodeAddress})
+	bestHeigth := chain.GetBestHeigth()
+	payload := GobEncode(Version{Version: version, BestHeigth: bestHeigth, AddrFrom: nodeAddress})
 	request := append(CmdToBytes("version"), payload...)
 	sendData(addr, request)
 }
@@ -183,138 +147,6 @@ func sendData(addr string, data []byte) {
 	_, err = io.Copy(conn, bytes.NewReader(data))
 	if err != nil {
 		log.Panic(err)
-	}
-}
-
-// handle address will handle the address get address request
-func HandleAddr(request []byte) {
-	var payload Addr
-	if err := DeserializePayload(request, &payload); err != nil {
-		log.Panic(err)
-	}
-
-	KnownNodes = append(KnownNodes, payload.AddrList...)
-	fmt.Printf("there are %d, known nodes\n", len(KnownNodes))
-	RequestBlocks()
-}
-
-// handle inventory will handle the get Inv request
-func HandleInv(request []byte, chain *blockchain.BlockChain) {
-	var payload Inv
-
-	if err := DeserializePayload(request, &payload); err != nil {
-		log.Panic(err)
-	}
-
-	fmt.Printf("Recivied inventory with %d, %s\n", len(payload.Items), payload.Type)
-
-	if payload.Type == "block" {
-		blocksInTransit = payload.Items
-		blockHash := payload.Items[0]
-		SendGetData(payload.AddrFrom, "block", blockHash)
-
-		newInTransit := [][]byte{}
-
-		for _, v := range blocksInTransit {
-			if !bytes.Equal(v, blockHash) {
-				newInTransit = append(newInTransit, v)
-			}
-		}
-
-		blocksInTransit = newInTransit
-	}
-
-	if payload.Type == "tx" {
-		txID := payload.Items[0]
-		if memoryPool[hex.EncodeToString(txID)].ID == nil {
-			SendGetData(payload.AddrFrom, "tx", txID)
-		}
-	}
-}
-
-// handle block will handle the address get block request
-func HandeBlock(request []byte, chain *blockchain.BlockChain) {
-	var payload Block
-	if err := DeserializePayload(request, &payload); err != nil {
-		log.Panic(err)
-	}
-
-	blockData := payload.Block
-	block := blockchain.Deserialize(blockData)
-	fmt.Println("Recevied a new block!")
-
-	chain.MineBlock(block.Transactions)
-	fmt.Printf("Added block %x\n", block.Hash)
-
-	if len(blocksInTransit) > 0 {
-		blockHash := blocksInTransit[0]
-		SendGetData(payload.AddrFrom, "block", blockHash)
-
-		blocksInTransit = blocksInTransit[1:]
-	} else {
-		UtxoSet := blockchain.UTXOSet{BlockChain: chain}
-		UtxoSet.Reindex()
-	}
-}
-
-// handle get block will handle the get blocks request
-func HandleGetBlocks(request []byte, chain *blockchain.BlockChain) {
-	var payload GetBlocks
-	if err := DeserializePayload(request, &payload); err != nil {
-		log.Panic(err)
-	}
-
-	blocks := chain.GetBlockHashes()
-	SendInv(payload.AddrFrom, "block", blocks)
-}
-
-// Handle GetData will handle the get data request
-func HandleGetData(request []byte, chain *blockchain.BlockChain) {
-	var payload GetData
-
-	if err := DeserializePayload(request, &payload); err != nil {
-		log.Panic(err)
-	}
-
-	if payload.Type == "block" {
-		block, err := chain.GetBlock([]byte(payload.ID))
-		if err != nil {
-			return
-		}
-
-		SendBlock(payload.AddrFrom, &block)
-	}
-
-	if payload.Type == "tx" {
-		txID := hex.EncodeToString(payload.ID)
-		tx := memoryPool[txID]
-		SendTx(payload.AddrFrom, &tx)
-	}
-}
-
-// Handle transaction will handle the get transaction request
-func HandleTx(request []byte, chain *blockchain.BlockChain) {
-	var payload Tx
-	if err := DeserializePayload(request, &payload); err != nil {
-		log.Panic(err)
-	}
-
-	txData := payload.Transaction
-	tx := blockchain.DeserializeTransaction(txData)
-	memoryPool[hex.EncodeToString(tx.ID)] = tx
-
-	fmt.Printf("%s, %d", nodeAddress, len(memoryPool))
-
-	if nodeAddress == KnownNodes[0] {
-		for _, node := range KnownNodes {
-			if node != nodeAddress && node != payload.AddrFrom {
-				SendInv(node, "tx", [][]byte{tx.ID})
-			}
-		}
-	} else {
-		if len(memoryPool) >= 2 && len(minerAddress) > 0 {
-			MineTx(chain)
-		}
 	}
 }
 
@@ -359,67 +191,6 @@ func MineTx(chain *blockchain.BlockChain) {
 	}
 }
 
-// handle version will handle the get version request
-func HandleVersion(request []byte, chain *blockchain.BlockChain) {
-	var payload Version
-	if err := DeserializePayload(request, &payload); err != nil {
-		log.Panic(err)
-	}
-
-	bestHeight := chain.GetBestHeigth()
-	otherHeigth := payload.BestHeigth
-
-	if bestHeight < otherHeigth {
-		SendGetBlock(payload.AddrFrom)
-
-	} else if bestHeight > otherHeigth {
-		SendVersion(payload.AddrFrom, chain)
-	}
-
-	if !NodeIsKnown(payload.AddrFrom) {
-		KnownNodes = append(KnownNodes, payload.AddrFrom)
-	}
-}
-
-// HandleConnection will handle connections of the current node
-func HandleConnection(conn net.Conn, chain *blockchain.BlockChain) {
-	req, err := ioutil.ReadAll(conn)
-	defer conn.Close()
-
-	if err != nil {
-		log.Panic(err)
-	}
-
-	command := BytesToCmd(req[:commandLength])
-	fmt.Printf("Received %s command\n", command)
-
-	switch command {
-	case "addr":
-		HandleAddr(req)
-
-	case "block":
-		HandeBlock(req, chain)
-
-	case "inv":
-		HandleInv(req, chain)
-
-	case "getblcoks":
-		HandleGetBlocks(req, chain)
-
-	case "getdata":
-		HandleGetData(req, chain)
-
-	case "tx":
-		HandleTx(req, chain)
-
-	case "version":
-		HandleVersion(req, chain)
-
-	default:
-		fmt.Println("Unkown Command")
-	}
-}
-
 // StartServer will start the server with the given node id
 func StartServer(nodeID, mineAddress string) {
 	nodeAddress = fmt.Sprintf("localhost:%s", nodeID)
@@ -447,51 +218,4 @@ func StartServer(nodeID, mineAddress string) {
 
 		go HandleConnection(conn, chain)
 	}
-}
-
-// GobEncode will allow us to serialize data in a generic way
-func GobEncode(data interface{}) []byte {
-	var buff bytes.Buffer
-
-	encoder := gob.NewEncoder(&buff)
-	if err := encoder.Encode(data); err != nil {
-		log.Panic(err)
-	}
-
-	return buff.Bytes()
-}
-
-// Node is known will check if the given node is
-// in the list of known nodes
-func NodeIsKnown(addr string) bool {
-	for _, node := range KnownNodes {
-		if node == addr {
-			return true
-		}
-	}
-
-	return false
-}
-
-// Deserialze payload will deserialize the request into a struuct
-func DeserializePayload(request []byte, payload interface{}) error {
-	var buff bytes.Buffer
-	buff.Write(request[commandLength:])
-	dec := gob.NewDecoder(&buff)
-
-	if err := dec.Decode(payload); err != nil {
-		return err
-	}
-	return nil
-}
-
-// CloseDB will grafully shutdown the system if the process is interrupt or recive a syscall
-func CloseDB(chain *blockchain.BlockChain) {
-	d := death.NewDeath(syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
-
-	d.WaitForDeathWithFunc(func() {
-		defer os.Exit(1)
-		defer runtime.Goexit()
-		chain.Database.Close()
-	})
 }
