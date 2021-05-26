@@ -3,6 +3,7 @@ package network
 import (
 	"bytes"
 	"encoding/gob"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -187,12 +188,8 @@ func sendData(addr string, data []byte) {
 
 // handle address will handle the address get address request
 func HandleAddr(request []byte) {
-	var buff bytes.Buffer
 	var payload Addr
-
-	buff.Write(request[commandLength:])
-	dec := gob.NewDecoder(&buff)
-	if err := dec.Decode(&payload); err != nil {
+	if err := DeserializePayload(request, &payload); err != nil {
 		log.Panic(err)
 	}
 
@@ -203,12 +200,8 @@ func HandleAddr(request []byte) {
 
 // handle block will handle the address get block request
 func HandeBlock(request []byte, chain *blockchain.BlockChain) {
-	var buff bytes.Buffer
 	var payload Block
-
-	buff.Write(request[commandLength:])
-	dec := gob.NewDecoder(&buff)
-	if err := dec.Decode(&payload); err != nil {
+	if err := DeserializePayload(request, &payload); err != nil {
 		log.Panic(err)
 	}
 
@@ -232,17 +225,114 @@ func HandeBlock(request []byte, chain *blockchain.BlockChain) {
 
 // handle get block will handle the get blocks request
 func HanleGetBlocks(request []byte, chain *blockchain.BlockChain) {
-	var buff bytes.Buffer
 	var payload GetBlocks
-
-	buff.Write(request[commandLength:])
-	dec := gob.NewDecoder(&buff)
-	if err := dec.Decode(&payload); err != nil {
+	if err := DeserializePayload(request, &payload); err != nil {
 		log.Panic(err)
 	}
 
-	// blocks := chain.GetBlockHashes()
+	// blocks := chain.GetBlockHashes() TODO
 	SendInv(payload.AddrFrom, "block", make([][]byte, 0))
+}
+
+// Handle GetData will handle the get data request
+func HandleGetData(request []byte, chain *blockchain.BlockChain) {
+	var payload GetData
+
+	if err := DeserializePayload(request, &payload); err != nil {
+		log.Panic(err)
+	}
+
+	if payload.Type == "block" {
+		// TODO implement GetBlock
+		// block, err := chain.GetBlock([]byte(payload.ID))
+		// if err != nil {
+		// 	return
+		// }
+
+		SendBlock(payload.AddrFrom, &blockchain.Block{})
+	}
+
+	if payload.Type == "tx" {
+		txID := hex.EncodeToString(payload.ID)
+		tx := memoryPool[txID]
+		SendTx(payload.AddrFrom, &tx)
+	}
+}
+
+// Handle transaction will handle the get transaction request
+func HandleTx(request []byte, chain *blockchain.BlockChain) {
+	var payload Tx
+	if err := DeserializePayload(request, &payload); err != nil {
+		log.Panic(err)
+	}
+
+	txData := payload.Transaction
+	tx := blockchain.Transaction{ID: txData} //blockchain.DeserializeTx(txData)
+	memoryPool[hex.EncodeToString(tx.ID)] = tx
+
+	fmt.Printf("%s, %d", nodeAddress, len(memoryPool))
+
+	if nodeAddress == KnownNodes[0] {
+		for _, node := range KnownNodes {
+			if node != nodeAddress && node != payload.AddrFrom {
+				SendInv(node, "tx", [][]byte{tx.ID})
+			}
+		}
+	} else {
+		if len(memoryPool) >= 2 && len(minerAddress) > 0 {
+			MineTx(chain)
+		}
+	}
+}
+
+func MineTx(chain *blockchain.BlockChain) {
+	var txs []*blockchain.Transaction
+
+	for id := range memoryPool {
+		fmt.Printf("tx: %s\n", memoryPool[id].ID)
+		tx := memoryPool[id]
+		if chain.VerifyTransaction(&tx) {
+			txs = append(txs, &tx)
+		}
+	}
+
+	if len(txs) == 0 {
+		fmt.Println("All the transactions are invalid")
+		return
+	}
+
+}
+
+// handle version will handle the get version request
+func HandleVersion(request []byte, chain *blockchain.BlockChain) {
+	var payload Version
+	if err := DeserializePayload(request, &payload); err != nil {
+		log.Panic(err)
+	}
+
+	bestHeight := 0 //chain.GetBestHeigth() TODO
+	otherHeigth := payload.BestHeigth
+
+	if bestHeight < otherHeigth {
+		SendGetBlock(payload.AddrFrom)
+
+	} else if bestHeight > otherHeigth {
+		SendVersion(payload.AddrFrom, chain)
+	}
+
+	if !NodeIsKnown(payload.AddrFrom) {
+		KnownNodes = append(KnownNodes, payload.AddrFrom)
+	}
+
+	// cbTx := blockchain.CoinbaseTx(minerAddress, "")
+	// txs := append(txs, cbTx)
+
+	// newBlock := blockchain.Block{} //chain.MineBlock(txs)
+	// UtxoSet := blockchain.UTXOSet{BlockChain: chain}
+	// UtxoSet.Reindex()
+
+	// fmt.Println("New Block mined")
+
 }
 
 // HandleConnection will handle connections of the current node
@@ -273,6 +363,30 @@ func GobEncode(data interface{}) []byte {
 	}
 
 	return buff.Bytes()
+}
+
+// Node is known will check if the given node is
+// in the list of known nodes
+func NodeIsKnown(addr string) bool {
+	for _, node := range KnownNodes {
+		if node == addr {
+			return true
+		}
+	}
+
+	return false
+}
+
+// Deserialze payload will deserialize the request into a struuct
+func DeserializePayload(request []byte, payload interface{}) error {
+	var buff bytes.Buffer
+	buff.Write(request[commandLength:])
+	dec := gob.NewDecoder(&buff)
+
+	if err := dec.Decode(payload); err != nil {
+		return err
+	}
+	return nil
 }
 
 // CloseDB will grafully shutdown the system if the process is interrupt or recive a syscall
