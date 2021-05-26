@@ -9,18 +9,18 @@ import (
 	"os"
 )
 
-const walletFile = "./tmp/Wallets.data"
+const walletFile = "./tmp/Wallets_%s.data"
 
 type Wallets struct {
 	Wallets map[string]*Wallet
 }
 
 // CreateWallters will generate a new Wallets instance
-func CreateWallets() (*Wallets, error) {
+func CreateWallets(nodeId string) (*Wallets, error) {
 	wallets := &Wallets{}
 
 	wallets.Wallets = make(map[string]*Wallet)
-	err := wallets.LoadFile()
+	err := wallets.LoadFile(nodeId)
 	return wallets, err
 }
 
@@ -52,7 +52,8 @@ func (ws *Wallets) AddWallet() string {
 
 // loadfile will check if the wallets file exists, if exists
 // will decode the data into the wallets struct
-func (ws *Wallets) LoadFile() error {
+func (ws *Wallets) LoadFile(nodeId string) error {
+	walletFile := fmt.Sprintf(walletFile, nodeId)
 	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
 		return err
 	}
@@ -76,8 +77,9 @@ func (ws *Wallets) LoadFile() error {
 
 // save file will save all data in the wallets map into the
 // wallets.data file
-func (ws *Wallets) SaveFile() {
+func (ws *Wallets) SaveFile(nodeId string) {
 	var content bytes.Buffer
+	walletFile := fmt.Sprintf(walletFile, nodeId)
 	gob.Register(elliptic.P256())
 
 	encoder := gob.NewEncoder(&content)
