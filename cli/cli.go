@@ -25,7 +25,7 @@ func (cli *CommandLine) printUsage() {
 	fmt.Println("	reindex - Rebuilds The unspent transactions outputs set")
 }
 
-// validateArgs will check if the given args
+// validateArgs will check if args were given
 func (cli *CommandLine) validateArgs() {
 	if len(os.Args) < 2 {
 		cli.printUsage()
@@ -33,6 +33,7 @@ func (cli *CommandLine) validateArgs() {
 	}
 }
 
+// validateAddress will check if the given address is valid
 func (cli *CommandLine) validateAddress(address string) {
 	if !wallet.ValidateAddress(address) {
 		fmt.Printf("Adress %s is invalid\n", address)
@@ -40,6 +41,8 @@ func (cli *CommandLine) validateAddress(address string) {
 	}
 }
 
+// reindex unspent transactions will call the reindex method
+// on the UtxoSet
 func (cli *CommandLine) reindexUTXO() {
 	chain := blockchain.ContinueBlockChain("")
 	defer chain.Database.Close()
