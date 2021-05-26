@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 
@@ -13,8 +14,7 @@ import (
 )
 
 const (
-	dbPath      = "./tmp/blocks"
-	dbFile      = "./tmp/blocks/MANIFEST"
+	dbPath      = "./tmp/blocks_%s"
 	genesisData = "First Transaction from genesis"
 )
 
@@ -29,8 +29,8 @@ type BlockChainIterator struct {
 }
 
 //DBexists will check if a badger db already exists in the db path
-func DBexists() bool {
-	if _, err := os.Stat(dbFile); os.IsNotExist(err) {
+func DBexists(path string) bool {
+	if _, err := os.Stat(path + "/MANIFEST"); os.IsNotExist(err) {
 		return false
 	}
 
@@ -38,14 +38,15 @@ func DBexists() bool {
 }
 
 // ContinueBlockchain will continue the blockchain with the last hashed block
-func ContinueBlockChain(address string) *BlockChain {
-	if !DBexists() {
+func ContinueBlockChain(nodeId string) *BlockChain {
+	path := fmt.Sprintf(dbPath, nodeId)
+	if !DBexists(path) {
 		fmt.Println("No existing blockchain found, go and create one!")
 		runtime.Goexit()
 	}
 
 	var lastHash []byte
-	db, err := badger.Open(badger.DefaultOptions(dbPath))
+	db, err := badger.Open(badger.DefaultOptions(path))
 	CheckError(err)
 
 	err = db.Update(func(txn *badger.Txn) error {
@@ -62,15 +63,16 @@ func ContinueBlockChain(address string) *BlockChain {
 }
 
 // InitBLockChain will start the blockchain
-func InitBLockChain(address string) *BlockChain {
+func InitBLockChain(address, nodeId string) *BlockChain {
 	var lastHash []byte
+	path := fmt.Sprintf(dbPath, nodeId)
 
-	if DBexists() {
+	if DBexists(path) {
 		fmt.Println("Blockchain already exists")
 		runtime.Goexit()
 	}
 
-	db, err := badger.Open(badger.DefaultOptions(dbPath))
+	db, err := badger.Open(badger.DefaultOptions(path))
 	CheckError(err)
 
 	err = db.Update(func(txn *badger.Txn) error {
@@ -91,24 +93,159 @@ func InitBLockChain(address string) *BlockChain {
 	return blockChain
 }
 
-// AddBlock will add a block to the block chain
-func (chain *BlockChain) AddBlock(transactions []*Transaction) *Block {
-	var lastHash []byte
+// add block will add the block to the db and check if
+// the heigth is the grater in the blockchain
+func (chain *BlockChain) AddBlock(block *Block) {
+	err := chain.Database.Update(func(txn *badger.Txn) error {
+		if _, err := txn.Get(block.Hash); err != nil {
+			return nil // the block is already store
+		}
+
+		blockData := block.Serialize()
+		if err := txn.Set(block.Hash, blockData); err != nil {
+			return err
+		}
+
+		item, err := txn.Get([]byte("lh"))
+		if err != nil {
+			return err
+		}
+
+		lastHash, _ := item.ValueCopy(nil)
+
+		item, err = txn.Get(lastHash)
+		if err != nil {
+			return err
+		}
+
+		lastBlockData, _ := item.ValueCopy(nil)
+		lastBlock := Deserialize(lastBlockData)
+
+		if block.Heigth > lastBlock.Heigth {
+			err = txn.Set([]byte("lh"), block.Hash)
+			if err != nil {
+				return err
+			}
+
+			chain.LastHash = block.Hash
+		}
+
+		return nil
+	})
+
+	CheckError(err)
+}
+
+// Get block will retrieve the block from the db if exists
+func (chain *BlockChain) GetBlock(blockHash []byte) (Block, error) {
+	var block Block
+
+	err := chain.Database.View(func(txn *badger.Txn) error {
+		if item, err := txn.Get(blockHash); err != nil {
+			return errors.New("Block is not found")
+		} else {
+			blockData, err := item.ValueCopy(nil)
+			if err != nil {
+				return err
+			}
+
+			block = *Deserialize(blockData)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return block, err
+	}
+
+	return block, nil
+}
+
+// Get block hashes will retrieve a 2 dimensional array
+// of all block hashes in the blockchain
+func (chain *BlockChain) GetBlockHashes() [][]byte {
+	var blocks [][]byte
+	iter := chain.Iterator()
+
+	for {
+		block := iter.Next()
+		blocks = append(blocks, block.Hash)
+		if len(block.PrevHash) == 0 {
+			break
+		}
+	}
+
+	return blocks
+}
+
+// Get BestHeigth will retrieve the larger block heigth
+func (chain *BlockChain) GetBestHeigth() int {
+	var lastBlock Block
 
 	err := chain.Database.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte("lh"))
-		CheckError(err)
+		if err != nil {
+			return err
+		}
+		lasthash, _ := item.ValueCopy(nil)
+
+		item, err = txn.Get(lasthash)
+		if err != nil {
+			return err
+		}
+
+		lastBlockData, _ := item.ValueCopy(nil)
+		lastBlock = *Deserialize(lastBlockData)
+		return nil
+	})
+
+	CheckError(err)
+	return lastBlock.Heigth
+}
+
+// MineBlock will add a block to the block chain
+func (chain *BlockChain) MineBlock(transactions []*Transaction) *Block {
+	var lastHash []byte
+	var lastHeigth int
+
+	defer HandlePanic()
+	for _, tx := range transactions {
+		if !chain.VerifyTransaction(tx) {
+			log.Panic("Invalid transaction")
+		}
+	}
+
+	err := chain.Database.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("lh"))
+		if err != nil {
+			return err
+		}
 
 		lastHash, err = item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+
+		item, err = txn.Get(lastHash)
+		if err != nil {
+			return err
+		}
+
+		lastBlockData, err := item.ValueCopy(nil)
+		lastBlock := Deserialize(lastBlockData)
+		lastHeigth = lastBlock.Heigth
+
 		return err
 	})
 
 	CheckError(err)
-	newBlock := CreateBlock(transactions, lastHash)
+	newBlock := CreateBlock(transactions, lastHash, lastHeigth+1)
 
 	err = chain.Database.Update(func(txn *badger.Txn) error {
 		err := txn.Set(newBlock.Hash, newBlock.Serialize())
-		CheckError(err)
+		if err != nil {
+			return err
+		}
 
 		err = txn.Set([]byte("lh"), newBlock.Hash)
 		chain.LastHash = newBlock.Hash
@@ -132,7 +269,9 @@ func (iter *BlockChainIterator) Next() *Block {
 
 	err := iter.Database.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(iter.CurrentHash)
-		CheckError(err)
+		if err != nil {
+			return err
+		}
 
 		endcodedBlock, err := item.ValueCopy(nil)
 		block = Deserialize(endcodedBlock)
