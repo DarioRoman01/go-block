@@ -243,7 +243,7 @@ func HandeBlock(request []byte, chain *blockchain.BlockChain) {
 	block := blockchain.Deserialize(blockData)
 	fmt.Println("Recevied a new block!")
 
-	chain.AddBlock(block.Transactions)
+	chain.MineBlock(block.Transactions)
 	fmt.Printf("Added block %x\n", block.Hash)
 
 	if len(blocksInTransit) > 0 {
@@ -264,8 +264,8 @@ func HandleGetBlocks(request []byte, chain *blockchain.BlockChain) {
 		log.Panic(err)
 	}
 
-	// blocks := chain.GetBlockHashes() TODO
-	SendInv(payload.AddrFrom, "block", make([][]byte, 0))
+	blocks := chain.GetBlockHashes()
+	SendInv(payload.AddrFrom, "block", blocks)
 }
 
 // Handle GetData will handle the get data request
@@ -277,13 +277,12 @@ func HandleGetData(request []byte, chain *blockchain.BlockChain) {
 	}
 
 	if payload.Type == "block" {
-		// TODO implement GetBlock
-		// block, err := chain.GetBlock([]byte(payload.ID))
-		// if err != nil {
-		// 	return
-		// }
+		block, err := chain.GetBlock([]byte(payload.ID))
+		if err != nil {
+			return
+		}
 
-		SendBlock(payload.AddrFrom, &blockchain.Block{})
+		SendBlock(payload.AddrFrom, &block)
 	}
 
 	if payload.Type == "tx" {
@@ -301,7 +300,7 @@ func HandleTx(request []byte, chain *blockchain.BlockChain) {
 	}
 
 	txData := payload.Transaction
-	tx := blockchain.Transaction{ID: txData} //blockchain.DeserializeTx(txData)
+	tx := blockchain.DeserializeTransaction(txData)
 	memoryPool[hex.EncodeToString(tx.ID)] = tx
 
 	fmt.Printf("%s, %d", nodeAddress, len(memoryPool))
@@ -338,7 +337,7 @@ func MineTx(chain *blockchain.BlockChain) {
 
 	cbTx := blockchain.CoinbaseTx(minerAddress, "")
 	txs = append(txs, cbTx)
-	newBlock := blockchain.Block{} //chain.MineBlock(txs)
+	newBlock := chain.MineBlock(txs)
 
 	UtxoSet := blockchain.UTXOSet{BlockChain: chain}
 	UtxoSet.Reindex()
@@ -367,7 +366,7 @@ func HandleVersion(request []byte, chain *blockchain.BlockChain) {
 		log.Panic(err)
 	}
 
-	bestHeight := 0 //chain.GetBestHeigth() TODO
+	bestHeight := chain.GetBestHeigth()
 	otherHeigth := payload.BestHeigth
 
 	if bestHeight < otherHeigth {
